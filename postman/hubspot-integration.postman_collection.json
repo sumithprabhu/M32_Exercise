@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "HubSpot Integration Microservice",
+    "description": "Local REST endpoints for the HubSpot Contacts integration service (OAuth install/callback, sync, read, webhook). Matches the curl examples in README.md.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "oauthCode", "value": "<code-from-hubspot-redirect>", "type": "string" },
+    { "key": "hubspotContactId", "value": "541935488729", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth - Install (redirect to HubSpot consent screen)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/auth/install",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "install"]
+        },
+        "description": "Redirects the browser to HubSpot's OAuth consent screen. Best opened directly in a browser rather than sent from Postman, since completing the flow requires clicking Allow."
+      },
+      "response": []
+    },
+    {
+      "name": "Auth - Callback (exchange code for tokens)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/auth/callback?code={{oauthCode}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "callback"],
+          "query": [
+            { "key": "code", "value": "{{oauthCode}}", "description": "One-time authorization code from HubSpot's redirect after clicking Allow" }
+          ]
+        },
+        "description": "Exchanges the authorization code for access/refresh tokens and stores them. HubSpot codes are single-use and short-lived, so this only works right after a real /auth/install redirect completes."
+      },
+      "response": [
+        {
+          "name": "200 connected",
+          "originalRequest": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/auth/callback?code=na2-99e5-8798-47a4-a52b-9846f30883f8" }
+          },
+          "status": "OK",
+          "code": 200,
+          "body": "{\"status\":\"connected\"}"
+        }
+      ]
+    },
+    {
+      "name": "Sync Contacts",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/sync/contacts",
+          "host": ["{{baseUrl}}"],
+          "path": ["sync", "contacts"]
+        },
+        "description": "Triggers a full paginated pull of all Contacts from HubSpot into the local DB. Idempotent — safe to send repeatedly."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/sync/contacts" } },
+          "status": "OK",
+          "code": 200,
+          "body": "{\"pagesFetched\":1,\"contactsUpserted\":2}"
+        }
+      ]
+    },
+    {
+      "name": "List Contacts",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/contacts?limit=10&sort=id_asc",
+          "host": ["{{baseUrl}}"],
+          "path": ["contacts"],
+          "query": [
+            { "key": "limit", "value": "10" },
+            { "key": "sort", "value": "id_asc" },
+            { "key": "after", "value": "", "disabled": true, "description": "Local id cursor" }
+          ]
+        },
+        "description": "Lists locally synced contacts. Query params: limit (1-100, default 20), after (local id cursor), sort (id_asc | id_desc)."
+      },
+      "response": [
+        {
+          "name": "200 OK",
+          "originalRequest": { "method": "GET", "url": { "raw": "{{baseUrl}}/contacts?limit=10" } },
+          "status": "OK",
+          "code": 200,
+          "body": "{\"results\":[{\"id\":1,\"hubspot_contact_id\":\"541935488729\",\"email\":\"emailmaria@hubspot.com\",\"first_name\":\"Maria\",\"last_name\":\"Johnson (Sample Contact)\",\"lifecycle_stage\":null,\"created_at\":1787842661022,\"updated_at\":1787842661022},{\"id\":2,\"hubspot_contact_id\":\"541935876822\",\"email\":\"bh@hubspot.com\",\"first_name\":\"Brian\",\"last_name\":\"Halligan (Sample Contact)\",\"lifecycle_stage\":null,\"created_at\":1787842661030,\"updated_at\":1787842661030}],\"count\":2}"
+        }
+      ]
+    },
+    {
+      "name": "Webhook - HubSpot Contact Event (manual, will 401)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[{\n  \"eventId\": 1,\n  \"subscriptionType\": \"contact.propertyChange\",\n  \"objectId\": {{hubspotContactId}},\n  \"propertyName\": \"email\"\n}]"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/webhook/hubspot",
+          "host": ["{{baseUrl}}"],
+          "path": ["webhook", "hubspot"]
+        },
+        "description": "This is HubSpot's legacy webhook payload shape (subscriptionType/objectId/eventId). A manual request like this will always get 401 — signature verification requires HubSpot's real HMAC over X-HubSpot-Signature-v3 / X-HubSpot-Request-Timestamp, which only HubSpot's servers can produce with the app's client secret. This request exists to document the payload shape and prove the endpoint correctly rejects unsigned traffic."
+      },
+      "response": [
+        {
+          "name": "401 invalid signature",
+          "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/webhook/hubspot" } },
+          "status": "Unauthorized",
+          "code": 401,
+          "body": "{\"error\":\"invalid signature\"}"
+        }
+      ]
+    }
+  ]
+}
