@@ -1,0 +1,21 @@
+{
+  "uid": "hubspot_app_webhooks",
+  "type": "webhooks",
+  "config": {
+    "settings": {
+      "targetUrl": "https://savoriest-larisa-immobile.ngrok-free.dev/webhook/hubspot",
+      "maxConcurrentRequests": 10
+    },
+    "subscriptions": {
+      "crmObjects": [],
+      "legacyCrmObjects": [
+        {
+          "subscriptionType": "contact.propertyChange",
+          "propertyName": "email",
+          "active": true
+        }
+      ],
+      "hubEvents": []
+    }
+  }
+}
