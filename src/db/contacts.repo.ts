@@ -71,3 +71,26 @@ export function getContactByHubspotId(hubspotContactId: string): ContactRow | un
 export function getContactById(id: number): ContactRow | undefined {
   return db.prepare("SELECT * FROM contacts WHERE id = @id").get({ id }) as ContactRow | undefined;
 }
+
+const deleteByHubspotIdStmt = db.prepare("DELETE FROM contacts WHERE hubspot_contact_id = @hubspotContactId");
+
+// Deleting a hubspot_contact_id that isn't present locally is a no-op (0 rows
+// affected), which makes this safe to call idempotently on retried webhook deliveries.
+export function deleteContactByHubspotId(hubspotContactId: string): void {
+  deleteByHubspotIdStmt.run({ hubspotContactId });
+}
+
+// Full-sync reconciliation: removes any local contact whose hubspot_contact_id
+// wasn't present in the given set (i.e. no longer returned by HubSpot's contacts
+// list, meaning it was deleted/archived upstream). Only safe to call after a
+// complete, uninterrupted full pull -- a partial page fetch would look identical
+// to a bunch of deletions and wrongly wipe contacts HubSpot still has.
+export function deleteContactsNotIn(hubspotContactIds: Iterable<string>): number {
+  const keep = new Set(hubspotContactIds);
+  const all = db.prepare("SELECT hubspot_contact_id FROM contacts").all() as { hubspot_contact_id: string }[];
+  const toDelete = all.filter((row) => !keep.has(row.hubspot_contact_id));
+  for (const row of toDelete) {
+    deleteByHubspotIdStmt.run({ hubspotContactId: row.hubspot_contact_id });
+  }
+  return toDelete.length;
+}

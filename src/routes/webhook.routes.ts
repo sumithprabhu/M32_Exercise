@@ -11,10 +11,11 @@ export const webhookRouter = Router();
  *     description: >
  *       Verifies the X-HubSpot-Signature-v3 HMAC (over method+url+rawBody+timestamp) before doing
  *       anything else, with a 5-minute replay window. Idempotent on eventId via the webhook_events
- *       unique index. On any non-deletion event, refetches the full contact from HubSpot rather than
- *       trusting the (partial) webhook payload, then upserts it. Meant to be called by HubSpot, not
- *       manually — a request without a valid HMAC will always be rejected, which is the one thing
- *       actually worth trying from this UI.
+ *       unique index. On a contact.deletion event, removes the local row (deleted contacts can't be
+ *       refetched). On any other event, refetches the full contact from HubSpot rather than trusting
+ *       the (partial) webhook payload, then upserts it. Meant to be called by HubSpot, not manually —
+ *       a request without a valid HMAC will always be rejected, which is the one thing actually worth
+ *       trying from this UI.
  *     tags: [Webhooks]
  *     requestBody:
  *       required: true

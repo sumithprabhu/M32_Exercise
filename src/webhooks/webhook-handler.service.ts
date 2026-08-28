@@ -1,6 +1,6 @@
 import { fetchContactById } from "../hubspot/contacts.api.js";
 import { mapHubspotContactToLocal } from "../sync/transformers.js";
-import { upsertContact } from "../db/contacts.repo.js";
+import { upsertContact, deleteContactByHubspotId } from "../db/contacts.repo.js";
 import { logger } from "../utils/logger.js";
 
 export interface HubspotWebhookEvent {
@@ -11,7 +11,14 @@ export interface HubspotWebhookEvent {
 
 export async function applyWebhookEvent(event: HubspotWebhookEvent): Promise<void> {
   if (event.subscriptionType.startsWith("contact.deletion")) {
-    logger.info("skipping refetch for deletion event", { eventId: event.eventId, objectId: event.objectId });
+    // Deleted contacts can't be refetched (they 404), so there's nothing to
+    // upsert -- just remove the local row. Idempotent: deleting an id that's
+    // already gone locally is a no-op, safe against retried deliveries.
+    deleteContactByHubspotId(event.objectId);
+    logger.info("deleted local contact after HubSpot deletion event", {
+      eventId: event.eventId,
+      objectId: event.objectId,
+    });
     return;
   }
 
