@@ -1,5 +1,7 @@
 # HubSpot Integration Microservice (v1: Contacts)
 
+**Deployed and live at: https://hubspot-integration-m32.onrender.com/**
+
 Standalone Node.js/TypeScript + Express service that:
 
 - Authenticates against HubSpot via OAuth2 (authorization code + refresh token, no static Private App token).
@@ -7,7 +9,7 @@ Standalone Node.js/TypeScript + Express service that:
 - Exposes local REST endpoints to read synced Contacts, with a narrowly-scoped push path back to HubSpot (`PATCH /contacts/:id`, last-write-wins).
 - Receives HubSpot webhooks (signature-verified, idempotent) to keep local data fresh between full syncs, including contact deletions.
 
-Scope is deliberately narrow: Contacts only, single HubSpot account. See "Explicitly out of scope" below.
+Scope is deliberately narrow: Contacts only, single HubSpot account, no UI.
 
 ## Setup
 
@@ -35,7 +37,8 @@ hs project create --name hubspot-app --dest hubspot-app \
   --project-base app --distribution private --auth oauth --features
 
 # 4. Edit hubspot-app/src/app/app-hsmeta.json:
-#    - auth.redirectUrls -> ["http://localhost:3000/auth/callback"]
+#    - auth.redirectUrls -> ["https://hubspot-integration-m32.onrender.com/auth/callback"]
+#      (add "http://localhost:3000/auth/callback" too if also running locally)
 #    - auth.requiredScopes -> ["oauth", "crm.objects.contacts.read", "crm.objects.contacts.write"]
 
 # 5. Upload + build + deploy (the --forceCreate flag skips the "does this
@@ -85,35 +88,35 @@ The DB file and its schema are created automatically on boot (`src/db/schema.sql
 
 ### 4. Connect a HubSpot account
 
-Open `http://localhost:3000/auth/install` in a browser, complete the HubSpot consent screen, and you'll be redirected back to `/auth/callback`, which exchanges the code for tokens and stores them (singleton row, `oauth_tokens.id = 1`).
+Open `https://hubspot-integration-m32.onrender.com/auth/install` in a browser, complete the HubSpot consent screen, and you'll be redirected back to `/auth/callback`, which exchanges the code for tokens and stores them (singleton row, `oauth_tokens.id = 1`).
 
 ### 5. Sync and read Contacts
 
 ```bash
-curl -X POST http://localhost:3000/sync/contacts
-curl "http://localhost:3000/contacts?limit=20&sort=id_asc"
+curl -X POST https://hubspot-integration-m32.onrender.com/sync/contacts
+curl "https://hubspot-integration-m32.onrender.com/contacts?limit=20&sort=id_asc"
 ```
 
 ## API Reference
 
-All examples below are real requests/responses captured against a live HubSpot developer test account during development (contact IDs and names are HubSpot's own default sample data, "Maria Johnson" / "Brian Halligan", present in every fresh developer test account, not anyone's real data). A Postman collection with all requests pre-built is at [`postman/hubspot-integration.postman_collection.json`](postman/hubspot-integration.postman_collection.json). Interactive docs also available at `/docs` once the server is running.
+All examples below are real requests/responses captured against a live HubSpot developer test account during development. A Postman collection with all requests pre-built is at [`postman/hubspot-integration.postman_collection.json`](postman/hubspot-integration.postman_collection.json). Interactive Swagger docs are live at https://hubspot-integration-m32.onrender.com/docs.
 
 ### `GET /auth/install`
 Redirects the browser to HubSpot's OAuth consent screen.
 
 ```bash
-curl -i http://localhost:3000/auth/install
+curl -i https://hubspot-integration-m32.onrender.com/auth/install
 ```
 ```
 HTTP/1.1 302 Found
-Location: https://app.hubspot.com/oauth/authorize?client_id=<your-client-id>&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=crm.objects.contacts.read+crm.objects.contacts.write
+Location: https://app.hubspot.com/oauth/authorize?client_id=<your-client-id>&redirect_uri=https%3A%2F%2Fhubspot-integration-m32.onrender.com%2Fauth%2Fcallback&scope=crm.objects.contacts.read+crm.objects.contacts.write
 ```
 
 ### `GET /auth/callback?code=...`
 Exchanges the authorization `code` for access/refresh tokens and persists them. You won't call this directly (HubSpot redirects the browser here after you click Allow), but this is the real shape of that request/response:
 
 ```bash
-curl "http://localhost:3000/auth/callback?code=na2-99e5-8798-47a4-a52b-9846f30883f8"
+curl "https://hubspot-integration-m32.onrender.com/auth/callback?code=na2-99e5-8798-47a4-a52b-9846f30883f8"
 # => {"status":"connected"}
 ```
 
@@ -121,7 +124,7 @@ curl "http://localhost:3000/auth/callback?code=na2-99e5-8798-47a4-a52b-9846f3088
 Triggers a full paginated pull of all Contacts from HubSpot into the local DB. Safe to re-run: upserts are keyed on `hubspot_contact_id`, so re-running produces no duplicates (verified by running it twice back-to-back, second run returns the same count with zero new rows created). Also reconciles deletions: any local contact not present in this full pull (deleted/archived in HubSpot since the last sync) is removed locally. This only happens after every page fetches successfully; a failed sync never deletes anything.
 
 ```bash
-curl -X POST http://localhost:3000/sync/contacts
+curl -X POST https://hubspot-integration-m32.onrender.com/sync/contacts
 # => {"pagesFetched":1,"contactsUpserted":2,"contactsDeleted":0}
 ```
 
@@ -136,7 +139,7 @@ Lists locally synced contacts.
 | `email` | none | Exact match filter (case-sensitive, no partial/fuzzy matching) |
 
 ```bash
-curl "http://localhost:3000/contacts?limit=10"
+curl "https://hubspot-integration-m32.onrender.com/contacts?limit=10"
 ```
 ```json
 {
@@ -149,9 +152,9 @@ curl "http://localhost:3000/contacts?limit=10"
 ```
 
 ```bash
-curl "http://localhost:3000/contacts?limit=10&sort=id_desc"
-curl "http://localhost:3000/contacts?limit=10&after=1"
-curl "http://localhost:3000/contacts?email=bh%40hubspot.com"
+curl "https://hubspot-integration-m32.onrender.com/contacts?limit=10&sort=id_desc"
+curl "https://hubspot-integration-m32.onrender.com/contacts?limit=10&after=1"
+curl "https://hubspot-integration-m32.onrender.com/contacts?email=bh%40hubspot.com"
 ```
 
 ### `PATCH /contacts/:id`
@@ -160,7 +163,7 @@ Pushes a local edit to HubSpot, then refreshes the local row from HubSpot's resp
 Body accepts any subset of `email`, `first_name`, `last_name`, `lifecycle_stage` (at least one required, same field names `GET /contacts` returns).
 
 ```bash
-curl -X PATCH http://localhost:3000/contacts/2 \
+curl -X PATCH https://hubspot-integration-m32.onrender.com/contacts/2 \
   -H "Content-Type: application/json" \
   -d '{"email":"bh.pushed.from.local@hubspot.com","lifecycle_stage":"customer"}'
 # => 200, returns the refreshed local row (real request against a HubSpot test account):
@@ -185,7 +188,7 @@ Receives HubSpot webhook event batches (legacy `subscriptionType`/`objectId`/`ev
 This endpoint is meant to be called by HubSpot, not curl'd directly, a manual curl without a valid HMAC will always be rejected, which is itself the behavior worth demonstrating:
 
 ```bash
-curl -i -X POST http://localhost:3000/webhook/hubspot \
+curl -i -X POST https://hubspot-integration-m32.onrender.com/webhook/hubspot \
   -H "Content-Type: application/json" \
   -d '[{"eventId":1,"subscriptionType":"contact.propertyChange","objectId":541935488729,"propertyName":"email"}]'
 # => HTTP/1.1 401 Unauthorized
@@ -240,9 +243,3 @@ npm test
 ```
 
 Uses `vitest`. Tests live under `/tests`, mirroring `/src`'s structure, not inline next to source files. Each test file gets an isolated real SQLite file (via `DATABASE_PATH` set to a fresh temp path in `tests/setup-env.ts`) rather than a mock. `tests/db/contacts.repo.test.ts` inserts the same `hubspot_contact_id` twice against real SQLite and asserts the row count stays 1. `tests/webhooks/webhook-signature.test.ts` checks a correctly-signed request is accepted and a tampered one is rejected. `tests/utils/retry.test.ts` checks a mocked 429 gets retried to success and a mocked 400 aborts after exactly one attempt (no retry). `tests/sync/contact-push.service.test.ts` mocks the HubSpot API layer (not the DB) to check a push succeeds and refreshes the local row when the edit isn't stale, and that a push is rejected, with HubSpot never called and the local row left untouched, when HubSpot's `lastmodifieddate` is newer than the local baseline. `tests/sync/contact-sync.service.test.ts` checks that a contact missing from a full pull gets deleted locally, and that a sync which throws partway through deletes nothing. `tests/webhooks/webhook-handler.service.test.ts` checks a `contact.deletion` event removes the local row without calling HubSpot, is a no-op for an id already gone locally, and that a non-deletion event still refetches and upserts as before.
-
-## Explicitly Out of Scope (v1)
-
-- Any HubSpot object other than Contacts (no Deals, Companies, Tickets).
-- Multi-tenant / multi-account support: single HubSpot account, singleton token row.
-- Any UI.
