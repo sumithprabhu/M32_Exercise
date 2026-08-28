@@ -1,0 +1,10 @@
+services:
+  hubspot-integration:
+    build: .
+    ports:
+      - "${PORT:-3000}:${PORT:-3000}"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
