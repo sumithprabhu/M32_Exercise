@@ -10,6 +10,8 @@ const envSchema = z.object({
   HUBSPOT_WEBHOOK_SECRET: z.string().min(1, "HUBSPOT_WEBHOOK_SECRET is required"),
   DATABASE_PATH: z.string().min(1).default("./data/app.db"),
   PORT: z.coerce.number().int().positive().default(3000),
+  // 0 disables the background scheduler; POST /sync/contacts still works either way.
+  SYNC_INTERVAL_MINUTES: z.coerce.number().int().nonnegative().default(0),
 });
 
 function loadConfig() {
