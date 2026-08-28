@@ -3,7 +3,7 @@
   "type": "webhooks",
   "config": {
     "settings": {
-      "targetUrl": "https://savoriest-larisa-immobile.ngrok-free.dev/webhook/hubspot",
+      "targetUrl": "https://hubspot-integration-m32.onrender.com/webhook/hubspot",
       "maxConcurrentRequests": 10
     },
     "subscriptions": {
@@ -12,6 +12,10 @@
         {
           "subscriptionType": "contact.propertyChange",
           "propertyName": "email",
+          "active": true
+        },
+        {
+          "subscriptionType": "contact.deletion",
           "active": true
         }
       ],
