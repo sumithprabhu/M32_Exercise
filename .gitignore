@@ -3,3 +3,5 @@ dist/
 data/
 .env
 *.log
+.DS_Store
+*.mp4
