@@ -13,7 +13,7 @@ declare module "axios" {
 async function ensureFreshAccessToken(): Promise<string> {
   const tokens = getStoredTokens();
   if (!tokens) {
-    throw new Error("No HubSpot tokens found — complete the OAuth flow via /auth/install first");
+    throw new Error("No HubSpot tokens found. Complete the OAuth flow via /auth/install first");
   }
   if (isTokenExpired(tokens)) {
     const refreshed = await refreshAccessToken(tokens.refreshToken);

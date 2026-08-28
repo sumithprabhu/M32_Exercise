@@ -23,7 +23,7 @@ export async function applyWebhookEvent(event: HubspotWebhookEvent): Promise<voi
   }
 
   // Webhook payloads carry only the single property that changed, not the full
-  // object — refetching keeps the local row consistent with HubSpot's current
+  // object, refetching keeps the local row consistent with HubSpot's current
   // state instead of partially patching it from a fragment.
   //
   // This also makes redundant deliveries safe by construction: when

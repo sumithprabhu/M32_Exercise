@@ -10,10 +10,10 @@ export const syncRouter = Router();
  *     summary: Pull all Contacts from HubSpot into the local database
  *     description: >
  *       Paginates through every HubSpot contact and idempotently upserts each into the local `contacts`
- *       table, keyed on `hubspot_contact_id`. Safe to call repeatedly — re-running produces no duplicates.
+ *       table, keyed on `hubspot_contact_id`. Safe to call repeatedly; re-running produces no duplicates.
  *       Also reconciles deletions: any local contact not present in this full pull (deleted/archived in
  *       HubSpot since the last sync) is removed locally. This only happens after every page fetches
- *       successfully — a failed sync never deletes anything.
+ *       successfully; a failed sync never deletes anything.
  *     tags: [Sync]
  *     responses:
  *       '200':

@@ -20,7 +20,7 @@ export const swaggerSpec = swaggerJSDoc({
       title: "HubSpot Integration Microservice",
       version: "1.0.0",
       description:
-        "OAuth2 + webhook + sync integration with HubSpot Contacts. Supplements README.md — see the README for full setup steps and design trade-offs; this is the interactive request/response reference.",
+        "OAuth2 + webhook + sync integration with HubSpot Contacts. Supplements README.md, see the README for full setup steps and design trade-offs; this is the interactive request/response reference.",
     },
     servers: [{ url: "/" }],
   },

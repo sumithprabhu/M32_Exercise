@@ -21,7 +21,7 @@ function parseRetryAfterMs(error: unknown): number | null {
 
 /**
  * HubSpot rate limits (429) and occasional 5xx blips are worth retrying; a 4xx
- * validation/auth error is not — retrying it just burns attempts before failing
+ * validation/auth error is not; retrying it just burns attempts before failing
  * the same way, so it's aborted immediately instead of consuming the budget.
  */
 export async function withHubspotRetry<T>(fn: () => Promise<T>): Promise<T> {

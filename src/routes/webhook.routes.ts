@@ -13,7 +13,7 @@ export const webhookRouter = Router();
  *       anything else, with a 5-minute replay window. Idempotent on eventId via the webhook_events
  *       unique index. On a contact.deletion event, removes the local row (deleted contacts can't be
  *       refetched). On any other event, refetches the full contact from HubSpot rather than trusting
- *       the (partial) webhook payload, then upserts it. Meant to be called by HubSpot, not manually —
+ *       the (partial) webhook payload, then upserts it. Meant to be called by HubSpot, not manually;
  *       a request without a valid HMAC will always be rejected, which is the one thing actually worth
  *       trying from this UI.
  *     tags: [Webhooks]
@@ -46,7 +46,7 @@ export const webhookRouter = Router();
  *             example:
  *               received: 1
  *       '401':
- *         description: Missing or invalid signature. Real observed response — any request sent from this UI without a genuine HubSpot HMAC will get exactly this.
+ *         description: Missing or invalid signature. Real observed response; any request sent from this UI without a genuine HubSpot HMAC will get exactly this.
  *         content:
  *           application/json:
  *             example:

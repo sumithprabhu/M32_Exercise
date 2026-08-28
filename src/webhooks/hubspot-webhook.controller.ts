@@ -22,7 +22,7 @@ export async function handleHubspotWebhook(req: Request, res: Response, next: Ne
 
     const events = webhookPayloadSchema.parse(req.body);
 
-    // Ack fast — HubSpot expects a prompt 2xx and retries deliveries that time out.
+    // Ack fast: HubSpot expects a prompt 2xx and retries deliveries that time out.
     // Per-event failures below are logged, not surfaced to HubSpot as a delivery failure.
     res.status(200).json({ received: events.length });
 

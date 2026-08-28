@@ -21,7 +21,7 @@ const listQuerySchema = z.object({
  * /contacts:
  *   get:
  *     summary: List locally synced contacts
- *     description: Reads from the local SQLite cache only — independent of HubSpot's own pagination cursor used internally by POST /sync/contacts.
+ *     description: Reads from the local SQLite cache only, independent of HubSpot's own pagination cursor used internally by POST /sync/contacts.
  *     tags: [Contacts]
  *     parameters:
  *       - in: query
@@ -148,7 +148,7 @@ const patchBodySchema = z
  *       '409':
  *         description: >
  *           Rejected: HubSpot's lastmodifieddate for this contact is newer than the local edit's
- *           baseline. Real conflict captured live during testing — re-sync and retry. Caller should
+ *           baseline. Real conflict captured live during testing; re-sync and retry. Caller should
  *           call POST /sync/contacts (or re-GET /contacts) before retrying the PATCH.
  *         content:
  *           application/json:

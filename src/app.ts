@@ -12,7 +12,7 @@ export function createApp() {
   const app = express();
 
   // Required so req.protocol reflects X-Forwarded-Proto from a reverse proxy/tunnel
-  // (ngrok, etc.) — HubSpot signs webhook requests with the public HTTPS URL it
+  // (ngrok, etc.). HubSpot signs webhook requests with the public HTTPS URL it
   // called, and without this Express reports the plain-HTTP protocol of the
   // proxy-to-app hop instead, breaking signature verification.
   app.set("trust proxy", true);
