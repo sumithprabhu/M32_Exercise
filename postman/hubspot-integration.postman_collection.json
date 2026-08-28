@@ -62,7 +62,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["sync", "contacts"]
         },
-        "description": "Triggers a full paginated pull of all Contacts from HubSpot into the local DB. Idempotent — safe to send repeatedly."
+        "description": "Triggers a full paginated pull of all Contacts from HubSpot into the local DB. Idempotent, safe to send repeatedly. Also reconciles deletions: any local contact no longer in HubSpot's full list is removed, but only after a fully successful pull."
       },
       "response": [
         {
@@ -70,7 +70,7 @@
           "originalRequest": { "method": "POST", "url": { "raw": "{{baseUrl}}/sync/contacts" } },
           "status": "OK",
           "code": 200,
-          "body": "{\"pagesFetched\":1,\"contactsUpserted\":2}"
+          "body": "{\"pagesFetched\":1,\"contactsUpserted\":2,\"contactsDeleted\":0}"
         }
       ]
     },
@@ -151,7 +151,7 @@
           "host": ["{{baseUrl}}"],
           "path": ["webhook", "hubspot"]
         },
-        "description": "This is HubSpot's legacy webhook payload shape (subscriptionType/objectId/eventId). A manual request like this will always get 401 — signature verification requires HubSpot's real HMAC over X-HubSpot-Signature-v3 / X-HubSpot-Request-Timestamp, which only HubSpot's servers can produce with the app's client secret. This request exists to document the payload shape and prove the endpoint correctly rejects unsigned traffic."
+        "description": "This is HubSpot's legacy webhook payload shape (subscriptionType/objectId/eventId). A manual request like this will always get 401, signature verification requires HubSpot's real HMAC over X-HubSpot-Signature-v3 / X-HubSpot-Request-Timestamp, which only HubSpot's servers can produce with the app's client secret. This request exists to document the payload shape and prove the endpoint correctly rejects unsigned traffic. A contact.deletion event uses the same shape with no propertyName/propertyValue, and removes the local row instead of refetching."
       },
       "response": [
         {
