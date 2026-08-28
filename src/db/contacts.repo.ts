@@ -36,25 +36,38 @@ export interface ListContactsFilters {
   limit: number;
   after?: number;
   sort: "id_asc" | "id_desc";
+  email?: string;
 }
 
 export function listContacts(filters: ListContactsFilters): ContactRow[] {
   const direction = filters.sort === "id_desc" ? "DESC" : "ASC";
   const comparator = filters.sort === "id_desc" ? "<" : ">";
 
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = { limit: filters.limit };
+
   if (filters.after !== undefined) {
-    return db
-      .prepare(`SELECT * FROM contacts WHERE id ${comparator} @after ORDER BY id ${direction} LIMIT @limit`)
-      .all({ after: filters.after, limit: filters.limit }) as ContactRow[];
+    conditions.push(`id ${comparator} @after`);
+    params.after = filters.after;
+  }
+  if (filters.email !== undefined) {
+    conditions.push("email = @email");
+    params.email = filters.email;
   }
 
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
   return db
-    .prepare(`SELECT * FROM contacts ORDER BY id ${direction} LIMIT @limit`)
-    .all({ limit: filters.limit }) as ContactRow[];
+    .prepare(`SELECT * FROM contacts ${whereClause} ORDER BY id ${direction} LIMIT @limit`)
+    .all(params) as ContactRow[];
 }
 
 export function getContactByHubspotId(hubspotContactId: string): ContactRow | undefined {
   return db
     .prepare("SELECT * FROM contacts WHERE hubspot_contact_id = @hubspotContactId")
     .get({ hubspotContactId }) as ContactRow | undefined;
+}
+
+export function getContactById(id: number): ContactRow | undefined {
+  return db.prepare("SELECT * FROM contacts WHERE id = @id").get({ id }) as ContactRow | undefined;
 }

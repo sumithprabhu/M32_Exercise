@@ -1,10 +1,12 @@
 import express, { type Request } from "express";
+import swaggerUi from "swagger-ui-express";
 import { requestLogger } from "./middleware/request-logger.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { syncRouter } from "./routes/sync.routes.js";
 import { contactsRouter } from "./routes/contacts.routes.js";
 import { webhookRouter } from "./routes/webhook.routes.js";
+import { swaggerSpec } from "./docs/swagger.js";
 
 export function createApp() {
   const app = express();
@@ -28,6 +30,8 @@ export function createApp() {
   app.use(requestLogger);
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   app.use("/auth", authRouter);
   app.use("/sync", syncRouter);

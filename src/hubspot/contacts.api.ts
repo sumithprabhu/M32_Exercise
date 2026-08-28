@@ -1,7 +1,9 @@
 import { hubspotClient } from "./hubspot.client.js";
 import { withHubspotRetry } from "../utils/retry.js";
 
-const CONTACT_PROPERTIES = ["email", "firstname", "lastname", "lifecyclestage"];
+// lastmodifieddate is used by the bidirectional-sync conflict check
+// (contact-push.service.ts) to detect edits made in HubSpot after our last sync.
+const CONTACT_PROPERTIES = ["email", "firstname", "lastname", "lifecyclestage", "lastmodifieddate"];
 const PAGE_SIZE = 100;
 
 export interface HubspotContactResult {
@@ -45,4 +47,13 @@ export async function fetchContactById(hubspotContactId: string): Promise<Hubspo
     })
   );
   return response.data;
+}
+
+export async function updateContactProperties(
+  hubspotContactId: string,
+  properties: Record<string, string>
+): Promise<void> {
+  await withHubspotRetry(() =>
+    hubspotClient.patch(`/crm/v3/objects/contacts/${hubspotContactId}`, { properties })
+  );
 }
