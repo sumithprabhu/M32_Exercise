@@ -86,10 +86,11 @@
           "query": [
             { "key": "limit", "value": "10" },
             { "key": "sort", "value": "id_asc" },
-            { "key": "after", "value": "", "disabled": true, "description": "Local id cursor" }
+            { "key": "after", "value": "", "disabled": true, "description": "Local id cursor" },
+            { "key": "email", "value": "", "disabled": true, "description": "Exact-match filter" }
           ]
         },
-        "description": "Lists locally synced contacts. Query params: limit (1-100, default 20), after (local id cursor), sort (id_asc | id_desc)."
+        "description": "Lists locally synced contacts. Query params: limit (1-100, default 20), after (local id cursor), sort (id_asc | id_desc), email (exact match filter)."
       },
       "response": [
         {
@@ -98,6 +99,39 @@
           "status": "OK",
           "code": 200,
           "body": "{\"results\":[{\"id\":1,\"hubspot_contact_id\":\"541935488729\",\"email\":\"emailmaria@hubspot.com\",\"first_name\":\"Maria\",\"last_name\":\"Johnson (Sample Contact)\",\"lifecycle_stage\":null,\"created_at\":1787842661022,\"updated_at\":1787842661022},{\"id\":2,\"hubspot_contact_id\":\"541935876822\",\"email\":\"bh@hubspot.com\",\"first_name\":\"Brian\",\"last_name\":\"Halligan (Sample Contact)\",\"lifecycle_stage\":null,\"created_at\":1787842661030,\"updated_at\":1787842661030}],\"count\":2}"
+        }
+      ]
+    },
+    {
+      "name": "Push Contact Update (bidirectional sync)",
+      "request": {
+        "method": "PATCH",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"bh.pushed.from.local@hubspot.com\",\n  \"lifecycle_stage\": \"customer\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/contacts/2",
+          "host": ["{{baseUrl}}"],
+          "path": ["contacts", "2"]
+        },
+        "description": "Pushes a local edit to HubSpot (last-write-wins by comparing HubSpot's lastmodifieddate against the local row's updated_at), then refreshes the local row from HubSpot's response. :id is the local autoincrement id from GET /contacts, not the HubSpot contact ID. Body accepts any subset of email, first_name, last_name, lifecycle_stage."
+      },
+      "response": [
+        {
+          "name": "200 OK (real push against a HubSpot test account)",
+          "originalRequest": { "method": "PATCH", "url": { "raw": "{{baseUrl}}/contacts/2" } },
+          "status": "OK",
+          "code": 200,
+          "body": "{\"id\":2,\"hubspot_contact_id\":\"541935876822\",\"email\":\"bh.pushed.from.local@hubspot.com\",\"first_name\":\"Brian\",\"last_name\":\"Halligan (Sample Contact)\",\"lifecycle_stage\":\"customer\",\"created_at\":1787842651856,\"updated_at\":1787891418954}"
+        },
+        {
+          "name": "409 stale_write_conflict",
+          "originalRequest": { "method": "PATCH", "url": { "raw": "{{baseUrl}}/contacts/2" } },
+          "status": "Conflict",
+          "code": 409,
+          "body": "{\"error\":\"stale_write_conflict\",\"message\":\"HubSpot has a newer version of this contact than the one this edit was based on. Re-sync (GET /contacts or POST /sync/contacts) and retry.\",\"hubspotLastModified\":\"2026-08-27T19:52:47.843Z\"}"
         }
       ]
     },

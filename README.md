@@ -4,10 +4,10 @@ Standalone Node.js/TypeScript + Express service that:
 
 - Authenticates against HubSpot via OAuth2 (authorization code + refresh token — no static Private App token).
 - Pulls Contacts from HubSpot into a local SQLite database (`better-sqlite3`), idempotently.
-- Exposes local REST endpoints to read synced Contacts.
+- Exposes local REST endpoints to read synced Contacts, with a narrowly-scoped push path back to HubSpot (`PATCH /contacts/:id`, last-write-wins).
 - Receives HubSpot webhooks (signature-verified, idempotent) to keep local data fresh between full syncs.
 
-Scope is deliberately narrow: Contacts only, pull-only, single HubSpot account. See "Explicitly out of scope" below.
+Scope is deliberately narrow: Contacts only, single HubSpot account. See "Explicitly out of scope" below.
 
 ## Setup
 
@@ -69,6 +69,7 @@ cp .env.example .env
 | `HUBSPOT_WEBHOOK_SECRET` | Secret used to HMAC-verify incoming webhook signatures (v3) |
 | `DATABASE_PATH` | Path to the SQLite file (default `./data/app.db`) |
 | `PORT` | HTTP port (default `3000`) |
+| `SYNC_INTERVAL_MINUTES` | Minutes between automatic background syncs; `0` (default) disables the scheduler |
 
 ### 3. Run
 
@@ -77,6 +78,8 @@ npm run dev        # tsx watch mode
 # or
 npm run build && npm start
 ```
+
+Or with Docker: `docker compose up --build` (reads `.env`, persists the SQLite file to `./data` on the host). Verified locally end-to-end: multi-stage build succeeds, the container starts cleanly with no `better-sqlite3` binding/ABI errors, `/contacts` and `/sync/contacts` work against the containerized service, writes are visible on the host-mounted `./data/app.db` from a separate host process, and data survives a full `docker compose stop` + `docker compose up` (no rebuild) cycle.
 
 The DB file and its schema are created automatically on boot (`src/db/schema.sql` is applied via `CREATE TABLE IF NOT EXISTS`).
 
@@ -93,7 +96,7 @@ curl "http://localhost:3000/contacts?limit=20&sort=id_asc"
 
 ## API Reference
 
-All examples below are real requests/responses captured against a live HubSpot developer test account during development (contact IDs and names are HubSpot's own default sample data — "Maria Johnson" / "Brian Halligan" — present in every fresh developer test account, not anyone's real data). A Postman collection with all five requests pre-built is at [`postman/hubspot-integration.postman_collection.json`](postman/hubspot-integration.postman_collection.json).
+All examples below are real requests/responses captured against a live HubSpot developer test account during development (contact IDs and names are HubSpot's own default sample data — "Maria Johnson" / "Brian Halligan" — present in every fresh developer test account, not anyone's real data). A Postman collection with all five requests pre-built is at [`postman/hubspot-integration.postman_collection.json`](postman/hubspot-integration.postman_collection.json). Interactive docs also available at `/docs` once the server is running.
 
 ### `GET /auth/install`
 Redirects the browser to HubSpot's OAuth consent screen.
@@ -130,6 +133,7 @@ Lists locally synced contacts.
 | `limit` | `20` | 1–100 |
 | `after` | — | Local `id` cursor; returns rows after (or before, if `sort=id_desc`) this id |
 | `sort` | `id_asc` | `id_asc` or `id_desc` |
+| `email` | — | Exact match filter (case-sensitive, no partial/fuzzy matching) |
 
 ```bash
 curl "http://localhost:3000/contacts?limit=10"
@@ -147,7 +151,33 @@ curl "http://localhost:3000/contacts?limit=10"
 ```bash
 curl "http://localhost:3000/contacts?limit=10&sort=id_desc"
 curl "http://localhost:3000/contacts?limit=10&after=1"
+curl "http://localhost:3000/contacts?email=bh%40hubspot.com"
 ```
+
+### `PATCH /contacts/:id`
+Pushes a local edit to HubSpot, then refreshes the local row from HubSpot's response — the one bidirectional-sync path this service supports (see the trade-offs section for the last-write-wins policy behind it). `:id` is the local autoincrement `id` from `GET /contacts`, not the HubSpot contact ID.
+
+Body accepts any subset of `email`, `first_name`, `last_name`, `lifecycle_stage` (at least one required, same field names `GET /contacts` returns).
+
+```bash
+curl -X PATCH http://localhost:3000/contacts/2 \
+  -H "Content-Type: application/json" \
+  -d '{"email":"bh.pushed.from.local@hubspot.com","lifecycle_stage":"customer"}'
+# => 200, returns the refreshed local row (real request against a HubSpot test account):
+# {"id":2,"hubspot_contact_id":"541935876822","email":"bh.pushed.from.local@hubspot.com", ...,"lifecycle_stage":"customer", ...}
+```
+
+If HubSpot's `lastmodifieddate` for that contact is newer than this row's local `updated_at` (someone or something changed it in HubSpot since our last sync), the push is rejected rather than silently overwritten:
+
+```bash
+# => 409 (real conflict hit during testing — HubSpot's own lastmodifieddate had
+# advanced past our local updated_at between syncs):
+# {"error":"stale_write_conflict","message":"HubSpot has a newer version of this
+# contact than the one this edit was based on. Re-sync (GET /contacts or POST
+# /sync/contacts) and retry.","hubspotLastModified":"2026-08-27T19:52:47.843Z"}
+```
+
+Re-running `POST /sync/contacts` to refresh the local baseline, then retrying the same `PATCH`, succeeds.
 
 ### `POST /webhook/hubspot`
 Receives HubSpot webhook event batches (legacy `subscriptionType`/`objectId`/`eventId` shape). Verifies the `X-HubSpot-Signature-v3` header before doing anything else; unsigned or invalid requests get `401` with no further processing. Duplicate deliveries (same `eventId`) are detected via the `webhook_events.event_id` unique index and skipped.
@@ -195,10 +225,22 @@ Once verified, this landed in `webhook_events` and triggered a refetch that upda
 - **ESM throughout** (`"type": "module"`, `NodeNext` module resolution) since `p-retry` v6+ dropped CommonJS support.
 - **`app.set("trust proxy", true)` is required, and it's a real gotcha we hit, not a defensive guess.** HubSpot's v3 signature is computed over the full request URL *as HubSpot called it* — `https://<public-host>/webhook/hubspot`. When this service sits behind a reverse proxy or tunnel (ngrok, in testing), the TLS connection terminates at the proxy and the hop to Express is plain HTTP, so `req.protocol` defaults to `"http"` unless Express is told to trust `X-Forwarded-Proto`. Without `trust proxy` enabled, every signature check silently reconstructs the wrong URL (`http://...` instead of `https://...`) and every genuine, correctly-signed HubSpot webhook gets rejected with `401` — no exception thrown, no obvious error, just consistent rejection that looks identical to "someone's forging requests." We hit this directly: real HubSpot deliveries came back `401 {"error":"invalid signature"}` against a fully correct `HUBSPOT_WEBHOOK_SECRET`, and it only surfaced once we inspected the raw request via ngrok's inspector (`http://127.0.0.1:4040`) and diffed the HMAC input by hand. Worth knowing if you deploy this behind any proxy/load balancer, not just ngrok — the same failure mode applies to nginx, an ALB, Cloudflare, etc., anywhere TLS terminates before Express sees the request.
 - **ngrok's free tier gives exactly one persistent static domain per account and allows one active tunnel session at a time.** If you already have an ngrok tunnel running for something else, starting a second one to test this service's webhook will fail with `ERR_NGROK_334` ("endpoint already online") rather than silently opening a second tunnel — you have to stop the existing one first.
+- **Background sync is a plain `setInterval`, not `node-cron`.** The only requirement is "run this on a fixed interval," which `setInterval` does natively with zero added dependencies; a cron *expression* parser would be solving a problem this service doesn't have (no need for "every Tuesday at 3am"-style scheduling). `startContactSyncScheduler` calls the exact same `runContactSync()` used by `POST /sync/contacts` — same logging, same idempotent upsert behavior, no parallel code path to keep in sync. Disabled by default (`SYNC_INTERVAL_MINUTES=0`) so the service doesn't start hitting HubSpot's API on a timer unless an operator opts in.
+- **Docker: prune, don't reinstall, for the runtime stage.** The build stage runs `npm ci` (full deps, needed for `tsc`), compiles, then `npm prune --omit=dev` to strip devDependencies from that same `node_modules` in place. The runtime stage copies that pruned `node_modules` and `dist/` directly — no second `npm ci`. This matters specifically because `better-sqlite3` is a native addon; running `npm ci` a second time in a different stage risks a rebuild against a subtly different environment. Copying the already-built native binary forward from the single stage that built it avoids that class of bug entirely, at the cost of images from the two stages needing to share the same OS/arch (true here since both stages derive from the same `node:22-slim` base). Verified locally: the container starts and reads/writes SQLite with no binding/ABI error, which is exactly the failure mode this approach was chosen to avoid.
+- **`email` filter is exact-match only, on purpose.** The brief asked for filtering "or" sorting on `/contacts`, and this service already had sorting — exact match on a unique-ish field like email covers the realistic "look up one contact" use case without pulling in `LIKE`/full-text search machinery for a single-tenant local cache of Contacts.
+- **Bidirectional sync: last-write-wins, compared against local `updated_at`, not a previously-stored `lastmodifieddate`.** `PATCH /contacts/:id` fetches HubSpot's current `lastmodifieddate` and compares it to the local row's `updated_at` (when we last wrote that row, from a sync or webhook). If HubSpot's timestamp is newer, the write is rejected with `409` instead of silently clobbering a change we haven't seen yet. The alternative — comparing against a `lastmodifieddate` value captured and stored locally at the last sync — would be a strictly more apples-to-apples comparison (same clock on both sides), but every contact synced before this feature existed would have no stored baseline to compare against, forcing an awkward "what do we do with unknown baselines" decision. Comparing against `updated_at` instead works unconditionally for every row already in the database, at the cost of comparing two different clocks (our server's wall-clock vs. HubSpot's) — acceptable for a conflict *heuristic*, not something being used as a security boundary.
+- **The push endpoint refetches after writing, reusing `mapHubspotContactToLocal` — same principle as the webhook handler, not a second mapping path.** After `PATCH`ing HubSpot, the service re-fetches the full contact via `fetchContactById` rather than trusting the PATCH response's shape, then runs it through the exact same transformer the sync and webhook paths use. One consequence worth calling out explicitly: HubSpot fires its own webhook for the change this endpoint just pushed, which will independently refetch and upsert the same contact a second time shortly after. This is safe by construction, not by luck — `upsertContact`'s `ON CONFLICT DO UPDATE` is idempotent (covered by `tests/db/contacts.repo.test.ts`), and `applyWebhookEvent` always does a full refetch-and-upsert rather than a partial patch, so reprocessing the same eventual state twice is a no-op. Verified by reading both code paths together, not assumed.
+
+## Testing
+
+```bash
+npm test
+```
+
+Uses `vitest`. Tests live under `/tests`, mirroring `/src`'s structure, not inline next to source files. Each test file gets an isolated real SQLite file (via `DATABASE_PATH` set to a fresh temp path in `tests/setup-env.ts`) rather than a mock — `tests/db/contacts.repo.test.ts` inserts the same `hubspot_contact_id` twice against real SQLite and asserts the row count stays 1. `tests/webhooks/webhook-signature.test.ts` checks a correctly-signed request is accepted and a tampered one is rejected. `tests/utils/retry.test.ts` checks a mocked 429 gets retried to success and a mocked 400 aborts after exactly one attempt (no retry). `tests/sync/contact-push.service.test.ts` mocks the HubSpot API layer (not the DB) to check a push succeeds and refreshes the local row when the edit isn't stale, and that a push is rejected — with HubSpot never called and the local row left untouched — when HubSpot's `lastmodifieddate` is newer than the local baseline.
 
 ## Explicitly Out of Scope (v1)
 
 - Any HubSpot object other than Contacts (no Deals, Companies, Tickets).
-- Bidirectional sync — this is HubSpot → local only. No local writes are pushed back to HubSpot.
 - Multi-tenant / multi-account support — single HubSpot account, singleton token row.
 - Any UI.
